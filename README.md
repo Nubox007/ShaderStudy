@@ -242,9 +242,8 @@ Shader "03_FireEffect"
 
 		void surf (Input IN, inout SurfaceOutputStandard o)
 		{
-			fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
-			fixed4 c2 = tex2D (_MainTex2, float2(IN.uv_MainTex.x, IN.uv_MainTex.y - _Time.y));
-
+			 fixed4 c2 = tex2D (_MainTex2, float2(IN.uv_MainTex2.x, IN.uv_MainTex2.y - _Time.y));
+            fixed4 c = tex2D (_MainTex, IN.uv_MainTex + c2.r);
 			o.Emission = c.rgb * c2.rgb;
 			o.Alpha = c.a * c2.a;
 		}
@@ -254,5 +253,22 @@ Shader "03_FireEffect"
 }
 
 ```
+<p>
+<img src = ./FireEffect.gif>
+</p>
+
+
+결과는 위와 같이 나타난다.
+위와 같이 나타나는 이유는 다음 텍스쳐들의 사용으로 설명할 수 있다.
+![](./fireTexture.png)
+
+위와 같은 텍스쳐들을 사용한다.
+
+1번 텍스쳐는 기본 이미지이고 
+2번 텍스쳐는 흑백 이미지이다. 둘 다 지정된 uv에 텍스쳐를 입히지만 2번의 경우 시간에 따라 y축 방향으로 uv 값들이 이동하게 되어있다. 그리고 1번 텍스쳐의 uv를 지정해줄 때 2번 텍스쳐의 색상값들을 넣어줌으로서 위와 같은 현상이 나타난다.
+텍스쳐를 입힐 때 uv의 위치값을 기준으로 해당 위치의 색상을 가져오는 식으로 표면에 색을 입히는 방식으로 처리된다. 이때, 흑백 이미지의 색상값은 검은색과 흰색의 사이의 값을 가지고 있으며 흰색에 가까울 수록 1에 가깝기에 왜곡이 커지게 된다.
+흑백 이미지의 색상값을 uv에 더해주게 되면 그만큼 원래 들어가야할 uv 위치에서 이동하게되며 최종적으로 위와 같은 일렁임 효과가가 나타난다.
+
+
 
 
