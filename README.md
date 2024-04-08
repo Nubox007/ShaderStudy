@@ -90,6 +90,9 @@ DirectX 11.0 이후
 이로인해 나온 것이 URP, HDRP 등으로 애니메이션을 만드는 노드 방식으로 셰이더를 다룰 수 있게 되었다.​ 서피스 셰이더에서는 픽셀, 정점 셰이더를 같이 다룰 수 있다.​
 
 
+
+### Shader_code
+
 ```CSharp
 Shader "01_Color" // 쉐이더 파일명
 {
@@ -199,6 +202,10 @@ o.Emission = IN.uv_MainTex.x;
 // 색상 값을 UV.x 값으로 나타낸다.
 ```
 
+
+
+### UV
+
 ![](./UV.png)
 
 위 코드를 적용하면 다음과 같이 적용된다.
@@ -269,6 +276,178 @@ Shader "03_FireEffect"
 텍스쳐를 입힐 때 uv의 위치값을 기준으로 해당 위치의 색상을 가져오는 식으로 표면에 색을 입히는 방식으로 처리된다. 이때, 흑백 이미지의 색상값은 검은색과 흰색의 사이의 값을 가지고 있으며 흰색에 가까울 수록 1에 가깝기에 왜곡이 커지게 된다.
 흑백 이미지의 색상값을 uv에 더해주게 되면 그만큼 원래 들어가야할 uv 위치에서 이동하게되며 최종적으로 위와 같은 일렁임 효과가가 나타난다.
 
+------------------------------
+### Masking
+
+
+![](./MaskingPic.png)
+
+마스킹은 일종의 거름망 같은 역할이다. Terrain을 제작할 때도 사용하는 것으로 입혀진 텍스쳐에 다른 텍스쳐를 씌우고 어떤 텍스쳐를 그릴지 Layer를 사용한 계층적 표현이나 쉐이더같이 해당 텍스쳐의 색을 통한 보간처리 같은 방법을 통해 위와 같은 방식으로 그릴 수 있다.
+
+``` C
+
+Shader "KCH/04_Masking"
+{
+    Properties
+    {
+        _MainTex ("Albedo (RGB)", 2D) = "white" {}
+        _MainTex2 ("Albedo (RGB)", 2D) = "white" {}
+        _MainTex3 ("Albedo (RGB)", 2D) = "white" {}
+        _MainTex4 ("Albedo (RGB)", 2D) = "white" {}
+        _MainTex5 ("Albedo (RGB)", 2D) = "white" {}
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Opaque" }
+
+        CGPROGRAM
+        #pragma surface surf Standard
+
+        sampler2D _MainTex;
+        sampler2D _MainTex2;
+        sampler2D _MainTex3;
+        sampler2D _MainTex4;
+        sampler2D _MainTex5;
+
+        struct Input
+        {
+            float2 uv_MainTex;
+        };
+
+        void surf (Input IN, inout SurfaceOutputStandard o)
+        {
+            // fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
+            // fixed4 c2 = tex2D (_MainTex2, IN.uv_MainTex);
+            // o.Emission = c.rgb * c2.rgb;
+
+		fixed4 maskC = tex2D (_MainTex, IN.uv_MainTex);
+		fixed4 baseC = tex2D (_MainTex2, IN.uv_MainTex);
+		fixed4 c3 = tex2D (_MainTex3, IN.uv_MainTex);
+		fixed4 c4 = tex2D (_MainTex4, IN.uv_MainTex);
+		fixed4 c5 = tex2D (_MainTex5, IN.uv_MainTex);
+
+		o.Albedo = lerp(baseC.rgb, c3.rgb, maskC.r);
+		o.Albedo = lerp(o.Albedo, c4.rgb, maskC.g);
+		o.Albedo = lerp(o.Albedo, c5.rgb, maskC.b);
+		// 이분에서 색을 지정할때 해당 픽셀의 색을 통해 보간 처리를 하며 
+		// 마스크의 색에 제일 가까울 수록 베이스 텍스쳐의 색깔에서 나타낼 텍스쳐의 색깔을 가져오는 것으로 만들어졌다.
+		// o.Albedo = c3.rgb * maskC.r +
+		// 		   c4.rgb * maskC.g +
+		// 		   c5.rgb * maskC.b +
+		//            baseC * (1 - (maskC.r + maskC.g + maskC.b));
+        }
+        ENDCG
+    }
+    FallBack "Diffuse"
+}
+
+
+```
+--------------------------
+### NormalMap
+
+![](./ROCKY_GROUND_NORM.png)
+
+텍스쳐를 입힐 때, 해당 픽셀의 위치의 노말을 나타내는 텍스쳐로 해당 텍스쳐를 사용하여 해당 픽셀에 대한 빛 처리를 나타낼 수 있다. 빛 반사를 나타내기 위해서는 빛 반사를 구현하기 위한 해당 면이 가진 노말 벡터가 필요하다. 이 노말 벡터를 이용해 빛 반사를 계산하여 해당 부분에 받은 빛에 대한 색깔처리를 나타낼 수 있다. 이 색깔처리로 하나의 텍스쳐를 처리하면서 빛처리를 함으로서 텍스쳐가 입혀진 오브젝트에 대한 음영 표현이 좀 더 세부적으로 나타날 수 있다.
+
+노말 맵 텍스쳐는 대게 XYZ 축을 색깔로 나타낸 것이다. XYZ축은 역시 각자 고유의 실수 값을 가진 데이터이기에 이를 변환하면 색깔로 나타낼 수 있다. 
+
+
+![](normalmapcompare.png)
+
+오브젝트의 축을 기준으로 노말 계산을 하게 되면 왼쪽 사진처럼 녹색, 빨강색, 파란색이 뒤섞인 이미지가 나온다. 물체가 가진 축은 항상 일정하기에 해당 면에 대한 노말을 모델에 맞추게 되면 위와 같이 나온다. 이걸 **로컬공간 노말맵** 이라고 한다.
+
+하지만 만약 물체가 회전하거나 물체가 받고 있는 빛이 움직이는 경우, 빛 계산이 잘못되어 음영이 잘못 나타날 수 있다. 그래서 움직이거나 빛의 영향을 자주 받는 경우, 오른쪽 같은 노말맵을 사용하여 움직임에 영향을 받지 않고 지속적으로 빛 계산이 가능하도록 만든게 **탄젠트 공간 노말맵** 이다. 이는 해당 노말 벡터를 기준으로 계산을 하여 텍스쳐를 나타낸 것으로 축이 노말벡터를 기준으로 만들어지고 이 축은 z축을 기준으로 만들어지기에 이 경우에는 텍스쳐가 대부분 파랗게 나오는 거다. 물체가 움직임고 빛이 움직임에 따라 빛을 계속 계산하기 위해 사용하는 것이기에 비용이 꽤나 많이 발생한다. 그래서 상황에 따라 적절한 노말맵을 사용하여 쉐이더에 연산되는 것 줄이는 것이 중요하다.
+
+
+### Lambert
+
+![](./Lambert.png)
+
+난반사에 대한 빛의 분포 조절이다. 위 사진과 같이 빛이 받은 면과 뒤로 갈 수록 점점 어두워지는 것을 볼 수 있다.
+
+```C
+float4 LightingTest (SurfaceOutput s, float3 lightDir, float atten) 
+{
+	float ndotl = saturate(dot(s.Normal, lightDir)); // -1 ~ 1 까지의 수치를 정규화시켜주는 함수
+	float4 final;
+	final.rgb = ndotl * s.Albedo * _LightColor0.rgb * atten; //atten = 감쇠값
+	final.a = s.Alpha;
+	return final;
+}
+
+```
+
+
+### Fresnel
+
+![](./Fresnel.png)
+
+카메라가 바라보고 있는 방향을 제외한 색깔 계산 방식으로 위와 같이 모델의 외곽선을 그릴 때 사용할 수 있다. 하지만 실제로 툰 세이딩이나 다른 기법들에 비해 너무 진하게 나타나거나 깔끔한 처리가 안되기에 다른 알고리즘을 적용하는 경우도 있다.
+``` C
+void surf (Input IN, inout SurfaceOutput o)
+{
+	fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
+	o.Albedo = c.rgb;
+	o.Normal = UnpackNormal(tex2D(_BumpMap, IN.uv_BumpMap));
+	float rim = saturate(dot(o.Normal, IN.viewDir));
+
+	if(rim > 0.3) rim = 1;
+	else rim = -1;
+
+	o.Emission = pow(1 - rim,_RimPower) * _RimColor.rgb * -1; 
+	o.Alpha = c.a ;
+}
+```
+
+
+### Hologram
+
+![](./Hologram.png)
+
+
+``` C
+
+ void surf (Input IN, inout SurfaceOutput o)
+{
+	fixed4 c = tex2D (_MainTex, IN.uv_MainTex);
+	//o.Albedo = c.rgb;
+	//o.Emission = float3(0, 1, 0);
+	o.Emission = IN.worldPos.xyz;
+	o.Emission = pow(frac(IN.worldPos.z*3- _Time.y),30)* float3(1,0,1);
+	float rim = saturate(dot(o.Normal, IN.viewDir));
+	rim = pow(1 - rim, 3);
+	//o.Alpha = rim * abs(sin(_Time.y));
+	o.Alpha = 1;
+}
+```
+
+### Phong
+
+![](./Phong.png)
+
+퐁세이딩이란 기본적으로 노말 벡터를 이용해 빛 반사를 해서 색을 나타내면 해당 면의 전체 색을 그리게 된다. 하지만 phong 쉐이딩으로 면과 면이 가진 노말 벡터들의 보간 처리를 하여 부드러운 색 처리를 하는 쉐이딩이다.
+
+``` C
+
+float4 LightingTest 
+(SurfaceOutput s, float3 lightDir, float3 viewDir, float atten) 
+{
+	// Specular
+	float3 H = normalize(lightDir + viewDir);
+	float spec = saturate(dot(H, s.Normal));
+	spec = pow(spec, 10);
+	return spec;
+}
+
+```
+
+## 2Pass
+
+![](./2Pass.png)
+
+2Pass는 기본적으로 물체를 두번 그리는 방식으로 물체를 표현하는 방식이다.
+단순히 쉐이더가 두번 그리기는 작업을 진행하는 것이기에 비용은 생각보다 크지 않지만 모델에 대한 처리가 조금만 잘
 
 
 
